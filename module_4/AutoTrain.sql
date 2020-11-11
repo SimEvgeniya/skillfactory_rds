@@ -309,10 +309,8 @@ SELECT
     fl.departure_airport,          -- аэропорт вылета
     fl.arrival_airport,            -- аэропорт прибытия
     fl.aircraft_code,              -- трёхзначный код самолета
-    fl.actual_departure,           -- реальное время вылета    
-    fl.actual_arrival,             -- реальное время прибытия   
     EXTRACT(HOUR from (fl.scheduled_arrival - fl.scheduled_departure)) * 60 + EXTRACT(minute from (fl.scheduled_arrival - fl.scheduled_departure)) way_minutes,  -- время полета
-    se.count_seats,                 -- количество мест в самолете
+    se.count_seats,                -- количество мест в самолете
     ti_fl.count_ticket,            -- количество билетов, проданных по рейсу
     ti_fl.sum_amout,               -- стоимость проданных билетов
     boo.sum_booking,               -- стоимость брони
