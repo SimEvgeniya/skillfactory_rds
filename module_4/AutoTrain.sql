@@ -295,11 +295,14 @@ order by 1 desc
 SELECT 
     fl.flight_id,                  --  id рейса
     fl.flight_no,                  -- номер рейса
-    'Anapa' departure_city,        -- город вылета
-    airp.city arrival_city,        -- город прибытия
-    airp.timezone,                 -- часовой пояс аэропорта прибытия
-    airp.longitude,                -- долгота аэропорта прибытия
-    airp.latitude,                 -- широта аэропорта прибытия
+    airp1.city dep_city,    	   -- город вылета Анапа
+    airp1.timezone dep_tz,         -- часовой пояс аэропорта вылета
+    airp1.longitude dep_lon,       -- долгота аэропорта вылета
+    airp1.latitude dep_lat,        -- широта аэропорта вылета
+    airp2.city arr_city,       	   -- город прибытия
+    airp2.timezone arr_tz,         -- часовой пояс аэропорта прибытия
+    airp2.longitude arr_lon,       -- долгота аэропорта прибытия
+    airp2.latitude arr_lat,        -- широта аэропорта прибытия
     airc.model,                    -- модель самолета
     airc.range,                    -- максимальная дальность полёта в километрах 
     fl.scheduled_departure,        -- запланированные дата и время вылета
@@ -312,6 +315,7 @@ SELECT
     EXTRACT(HOUR from (fl.scheduled_arrival - fl.scheduled_departure)) * 60 + EXTRACT(minute from (fl.scheduled_arrival - fl.scheduled_departure)) way_minutes,  -- время полета
     se.count_seats,                -- количество мест в самолете
     ti_fl.count_ticket,            -- количество билетов, проданных по рейсу
+    (ti_fl.count_ticket * 100)/se.count_seats::int occupancy,     -- процент заполненности самолета на рейсе
     ti_fl.sum_amout,               -- стоимость проданных билетов
     boo.sum_booking,               -- стоимость брони
     tf1.count_Economy,             -- количество проданных билетов Эконом класса
@@ -319,60 +323,61 @@ SELECT
     tf2.count_Business,            -- количество проданных билетов Бизнес класса
     tf2.sum_Business               -- стоимость проданных билетов Бизнес класса
 FROM dst_project.flights fl
-    join dst_project.airports airp on fl.arrival_airport = airp.airport_code
-        join dst_project.aircrafts airc on fl.aircraft_code = airc.aircraft_code
-            join (SELECT 
-                    fl.flight_id,                  --  id рейса
-                    count(se.seat_no) count_seats  -- количество мест в самолете всего
-                    FROM dst_project.flights fl
-                            join dst_project.seats se on fl.aircraft_code = se.aircraft_code
-                    WHERE fl.departure_airport = 'AAQ'
-                      AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
-                      AND fl.status not in ('Cancelled')
-                    group by 1) se on fl.flight_id = se.flight_id
-                left join (SELECT
-                                fl.flight_id,                                  --  id рейса
-                                count(distinct tf0.ticket_no) count_ticket,    -- количество билетов, проданных по рейсу
-                                sum(tf0.amount) sum_amout                      -- стоимость проданных билетов
+    join dst_project.airports airp1 on fl.departure_airport = airp1.airport_code
+        join dst_project.airports airp2 on fl.arrival_airport = airp2.airport_code
+            join dst_project.aircrafts airc on fl.aircraft_code = airc.aircraft_code
+                join (SELECT 
+                        fl.flight_id,                  --  id рейса
+                        count(se.seat_no) count_seats  -- количество мест в самолете всего
+                        FROM dst_project.flights fl
+                                join dst_project.seats se on fl.aircraft_code = se.aircraft_code
+                        WHERE fl.departure_airport = 'AAQ'
+                          AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
+                          AND fl.status not in ('Cancelled')
+                        group by 1) se on fl.flight_id = se.flight_id
+                    left join (SELECT
+                                    fl.flight_id,                                  --  id рейса
+                                    count(distinct tf0.ticket_no) count_ticket,    -- количество билетов, проданных по рейсу
+                                    sum(tf0.amount) sum_amout                      -- стоимость проданных билетов
+                                    FROM dst_project.flights fl
+                                        left join dst_project.ticket_flights tf0 on fl.flight_id = tf0.flight_id
+                                    WHERE fl.departure_airport = 'AAQ'
+                                      AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
+                                      AND fl.status not in ('Cancelled')
+                                    group by 1) ti_fl on fl.flight_id = ti_fl.flight_id        
+                        left join (SELECT 
+                                fl.flight_id,                                   --  id рейса
+                                sum(boo.total_amount) sum_booking               -- стоимость брони
                                 FROM dst_project.flights fl
-                                    left join dst_project.ticket_flights tf0 on fl.flight_id = tf0.flight_id
+                                        left join dst_project.ticket_flights ti_fl on fl.flight_id = ti_fl.flight_id
+                                            left join dst_project.tickets ti on ti_fl.ticket_no = ti.ticket_no
+                                                left join dst_project.bookings boo on ti.book_ref = boo.book_ref
                                 WHERE fl.departure_airport = 'AAQ'
                                   AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
                                   AND fl.status not in ('Cancelled')
-                                group by 1) ti_fl on fl.flight_id = ti_fl.flight_id        
-                    left join (SELECT 
-                            fl.flight_id,                                   --  id рейса
-                            sum(boo.total_amount) sum_booking               -- стоимость брони
-                            FROM dst_project.flights fl
-                                    left join dst_project.ticket_flights ti_fl on fl.flight_id = ti_fl.flight_id
-                                        left join dst_project.tickets ti on ti_fl.ticket_no = ti.ticket_no
-                                            left join dst_project.bookings boo on ti.book_ref = boo.book_ref
-                            WHERE fl.departure_airport = 'AAQ'
-                              AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
-                              AND fl.status not in ('Cancelled')
-                            group by 1) boo on fl.flight_id = boo.flight_id
-                        left join (SELECT                                         -- данные по Эконом классу
-                                 fl.flight_id, 
-                                count(distinct tf1.ticket_no) count_Economy,
-                                sum( tf1.amount) sum_Econom
-                                FROM dst_project.flights fl
-                                   left join dst_project.ticket_flights tf1 on fl.flight_id = tf1.flight_id
-                                WHERE fl.departure_airport = 'AAQ' 
-                                    AND tf1.fare_conditions = 'Economy'   
-                                  AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
-                                  AND fl.status not in ('Cancelled')
-                                group by 1) tf1 on fl.flight_id = tf1.flight_id
-                            left join (SELECT                                      -- данные по Бизнес классу
-                                    fl.flight_id, 
-                                    count(distinct tf2.ticket_no) count_Business,
-                                    sum(tf2.amount) sum_Business
+                                group by 1) boo on fl.flight_id = boo.flight_id
+                            left join (SELECT                                         -- данные по Эконом классу
+                                     fl.flight_id, 
+                                    count(distinct tf1.ticket_no) count_Economy,
+                                    sum( tf1.amount) sum_Econom
                                     FROM dst_project.flights fl
-                                       left join dst_project.ticket_flights tf2 on fl.flight_id = tf2.flight_id
+                                       left join dst_project.ticket_flights tf1 on fl.flight_id = tf1.flight_id
                                     WHERE fl.departure_airport = 'AAQ' 
-                                        AND tf2.fare_conditions = 'Business'   
+                                        AND tf1.fare_conditions = 'Economy'   
                                       AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
                                       AND fl.status not in ('Cancelled')
-                                    group by 1) tf2 on fl.flight_id = tf2.flight_id
+                                    group by 1) tf1 on fl.flight_id = tf1.flight_id
+                                left join (SELECT                                      -- данные по Бизнес классу
+                                        fl.flight_id, 
+                                        count(distinct tf2.ticket_no) count_Business,
+                                        sum(tf2.amount) sum_Business
+                                        FROM dst_project.flights fl
+                                           left join dst_project.ticket_flights tf2 on fl.flight_id = tf2.flight_id
+                                        WHERE fl.departure_airport = 'AAQ' 
+                                            AND tf2.fare_conditions = 'Business'   
+                                          AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
+                                          AND fl.status not in ('Cancelled')
+                                        group by 1) tf2 on fl.flight_id = tf2.flight_id
 WHERE fl.departure_airport = 'AAQ'
   AND (date_trunc('month', fl.scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
   AND fl.status not in ('Cancelled')
